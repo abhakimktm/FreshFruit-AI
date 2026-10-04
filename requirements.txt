@@ -2,6 +2,7 @@ streamlit
 tensorflow
 numpy
 pandas
-joblib
+joblib == 1.6.0
 pillow
 scikit-image
+scikit-leaarn == 1.9.1
