@@ -525,6 +525,46 @@ def gauge_html(confidence, has_probability):
     )
 
 
+FRUIT_OPTIONS = ["ไม่ระบุ"] + [f"{en} ({th})" for en, th, _ in FRUIT_LIST]
+FRUIT_COLORS = {f"{en} ({th})": c for en, th, c in FRUIT_LIST}
+
+
+def result_card_html(kind, confidence, has_probability, model_name, fruit_choice):
+    """kind = 'fresh' | 'rotten'. fruit_choice is what the USER picked (the models do not detect fruit type)."""
+    fresh = kind == "fresh"
+    icon = "check_circle" if fresh else "cancel"
+    word = "สด" if fresh else "เน่า"
+    hint = (
+        "จากภาพนี้ โมเดลประเมินว่าผลไม้ยังสดอยู่"
+        if fresh
+        else "จากภาพนี้ โมเดลประเมินว่าพบลักษณะของผลไม้เน่าเสีย"
+    )
+
+    chip = ""
+    note = ""
+    if fruit_choice and fruit_choice != "ไม่ระบุ":
+        color = FRUIT_COLORS.get(fruit_choice, "#4f9a5f")
+        chip = f'<div class="fruit-chip"><i style="--c:{color}"></i>{fruit_choice}</div>'
+        note = (
+            '<div class="result-note">'
+            'ชนิดผลไม้เป็นข้อมูลที่ผู้ใช้เลือก ระบบจำแนกเฉพาะสด/เน่า ไม่ได้ตรวจจับชนิดผลไม้'
+            '</div>'
+        )
+
+    return (
+        f'<div class="result-{kind}">'
+        '<div class="result-kicker">ผลลัพธ์การจำแนก</div>'
+        f'{chip}'
+        f'<div class="result-label"><span class="icon">{icon}</span> '
+        f'ผลไม้ชนิดนี้ <span class="verdict-word">{word}</span></div>'
+        f'{gauge_html(confidence, has_probability)}'
+        f'<div class="result-meta">โมเดลที่ใช้: <b>{model_name}</b></div>'
+        f'<div class="result-hint">{hint}<br>ควรตรวจสอบผลไม้จริงอีกครั้งก่อนตัดสินใจ</div>'
+        f'{note}'
+        '</div>'
+    )
+
+
 def fruit_pills_html():
     return "".join(
         f'<span class="pill"><i style="--c:{c}"></i>{en}</span>'
@@ -536,7 +576,7 @@ st.set_page_config(
     page_title="FreshFruit AI | ตรวจสอบผลไม้สด/เน่า",
     page_icon="🍎",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"
 )
 
 
@@ -1073,6 +1113,75 @@ html { scroll-behavior: smooth; }
         background: linear-gradient(100deg, transparent, rgba(255,255,255,0.35), transparent); transform: skewX(-20deg); }
 .stButton > button:hover::after { left: 130%; transition: left 0.7s ease; }
 
+    
+/* ================= result card extras ================= */
+.result-kicker { font-size: 0.85rem; font-weight: 700; color: #6c7a6c; margin-bottom: 0.5rem; }
+.fruit-chip { display: inline-flex; align-items: center; gap: 0.45rem; background: rgba(255,255,255,0.85); border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 999px; padding: 0.15rem 0.85rem; font-weight: 700; font-size: 1rem; color: #35503b; margin-bottom: 0.5rem; }
+.fruit-chip i { width: 11px; height: 11px; border-radius: 50%; background: var(--c); display: inline-block; }
+.result-label .verdict-word { font-size: 1.25em; font-weight: 900; }
+.result-meta { margin-top: 0.7rem; color: #6c7a6c; font-size: 0.95rem; }
+.result-hint { margin-top: 0.35rem; color: #7a867a; font-size: 0.85rem; line-height: 1.55; }
+.result-note { margin-top: 0.5rem; color: #8a968a; font-size: 0.78rem; }
+
+/* ================= in-page navigation (shown on phones/tablets only) ================= */
+.st-key-nav_m [data-testid="stRadio"] [role="radiogroup"] { gap: 0.4rem; flex-wrap: wrap; }
+.st-key-nav_m [data-testid="stRadio"] label { background: white; border: 1px solid #dfe8d8; border-radius: 999px; padding: 0.4rem 0.95rem;
+        margin: 0; transition: all 0.2s ease; cursor: pointer; }
+.st-key-nav_m [data-testid="stRadio"] label > div:first-child { display: none; }
+.st-key-nav_m [data-testid="stRadio"] label p { font-size: 1rem; font-weight: 600; color: #35503b; }
+.st-key-nav_m [data-testid="stRadio"] label:has(input:checked) { background: linear-gradient(135deg, #3f8a55, #2f6b43); border-color: #2f6b43;
+        box-shadow: 0 6px 16px rgba(47,107,67,0.25); }
+.st-key-nav_m [data-testid="stRadio"] label:has(input:checked) p { color: white; font-weight: 700; }
+@media (min-width: 769px) { .st-key-nav_m { display: none; } }
+
+/* ================= phones & small tablets ================= */
+@media (max-width: 768px) {
+    .block-container { padding: 3.2rem 0.9rem 2.5rem 0.9rem; max-width: 100%; }
+    .section-title { font-size: 1.45rem; margin-bottom: 0.8rem; }
+    .section-label { font-size: 0.75rem; }
+    .info-card { padding: 1.1rem; border-radius: 16px; }
+    .info-card-title { font-size: 1.05rem; }
+    .info-card-text { font-size: 0.93rem; line-height: 1.7; }
+    .workflow-title { font-size: 1.05rem; }
+    .workflow-text { font-size: 0.9rem; }
+    .model-badge { font-size: 0.85rem; padding: 0.35rem 0.8rem; }
+    .upload-title { font-size: 1.05rem; }
+    .small-note { font-size: 0.85rem; }
+
+    .result-fresh, .result-rotten { padding: 1.4rem 1rem; border-radius: 20px; }
+    .result-label { font-size: 1.65rem; line-height: 1.4; }
+    .ring { width: 128px; height: 128px; }
+    .ring::before { inset: 11px; }
+    .ring span { font-size: 1.75rem; }
+
+    .marquee { padding: 0.45rem 0; margin-bottom: 1rem; }
+    .marquee-item { font-size: 0.92rem; }
+
+    div[data-testid="stMetric"] { padding: 0.8rem 0.85rem; border-radius: 14px; }
+    div[data-testid="stMetricValue"] { font-size: 1.55rem; }
+    div[data-testid="stMetricLabel"] p { font-size: 0.82rem; }
+
+    /* rows of metrics sit two-up instead of stacking into a long column */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) { flex-wrap: wrap; gap: 0.7rem; }
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="stColumn"],
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="column"] {
+        min-width: calc(50% - 0.7rem) !important; flex: 1 1 calc(50% - 0.7rem) !important; }
+
+    /* comfortable tap targets */
+    .stButton > button { min-height: 3.2rem; font-size: 1.05rem; }
+    [data-testid="stFileUploader"] section { padding: 1rem; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label { padding: 0.8rem 0.9rem; }
+    .st-key-nav_m [data-testid="stRadio"] label { padding: 0.5rem 1rem; }
+    [data-testid="stDataFrame"] { font-size: 0.85rem; }
+}
+
+@media (max-width: 400px) {
+    .block-container { padding-left: 0.65rem; padding-right: 0.65rem; }
+    .result-label { font-size: 1.45rem; }
+    .section-title { font-size: 1.3rem; }
+}
+
     </style>
     """,
     unsafe_allow_html=True
@@ -1208,15 +1317,38 @@ render_html_sidebar(
 )
 
 
-page = st.sidebar.radio(
+PAGES = ["Overview", "Predict", "Model Comparison"]
+
+
+def _sync_nav(src, dst):
+    st.session_state[dst] = st.session_state[src]
+
+
+for _key in ("nav_s", "nav_m"):
+    if _key not in st.session_state:
+        st.session_state[_key] = PAGES[0]
+
+st.sidebar.radio(
     "เมนูนำทาง",
-    [
-        "Overview",
-        "Predict",
-        "Model Comparison"
-    ],
+    PAGES,
+    key="nav_s",
+    on_change=_sync_nav,
+    args=("nav_s", "nav_m"),
     label_visibility="collapsed"
 )
+
+# เมนูสำหรับมือถือ/แท็บเล็ต (ซ่อนบนจอกว้างด้วย CSS) เพราะ sidebar จะถูกพับเก็บ
+st.radio(
+    "ไปที่หน้า",
+    PAGES,
+    key="nav_m",
+    horizontal=True,
+    on_change=_sync_nav,
+    args=("nav_m", "nav_s"),
+    label_visibility="collapsed"
+)
+
+page = st.session_state["nav_s"]
 
 
 render_html_sidebar(
@@ -1537,6 +1669,12 @@ elif page == "Predict":
             unsafe_allow_html=True
         )
 
+        fruit_choice = st.selectbox(
+            "ชนิดผลไม้ (ไม่บังคับ)",
+            FRUIT_OPTIONS,
+            help="ใช้แสดงในผลลัพธ์เท่านั้น ระบบไม่ได้ตรวจจับชนิดผลไม้จากภาพ"
+        )
+
 
     with col2:
 
@@ -1707,14 +1845,13 @@ elif page == "Predict":
                     )
 
                     render_html(
-                        f"""
-                        <div class="result-fresh">
-                            <div class="result-label">
-                                <span class="icon">check_circle</span> สด
-                            </div>
-                            {gauge_html(confidence, fresh_probability is not None)}
-                        </div>
-                        """,
+                        result_card_html(
+                            "fresh",
+                            confidence,
+                            fresh_probability is not None,
+                            model_name,
+                            fruit_choice
+                        ),
                         unsafe_allow_html=True
                     )
 
@@ -1727,14 +1864,13 @@ elif page == "Predict":
                     )
 
                     render_html(
-                        f"""
-                        <div class="result-rotten">
-                            <div class="result-label">
-                                <span class="icon">cancel</span> เน่า
-                            </div>
-                            {gauge_html(confidence, fresh_probability is not None)}
-                        </div>
-                        """,
+                        result_card_html(
+                            "rotten",
+                            confidence,
+                            fresh_probability is not None,
+                            model_name,
+                            fruit_choice
+                        ),
                         unsafe_allow_html=True
                     )
 
