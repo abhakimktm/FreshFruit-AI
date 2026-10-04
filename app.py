@@ -43,9 +43,11 @@ HERO_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="__SCHEME__">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap');
 
+:root { color-scheme: __SCHEME__; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: transparent;
     font-family: 'Noto Sans Thai', 'Segoe UI', Tahoma, sans-serif; color: #1f3d2a; }
@@ -205,9 +207,41 @@ body.compact .note { display: none; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition-duration: .01s !important; }
 }
+
+/* ---------------- dark theme (class added by Python when Streamlit's theme is dark) ---------------- */
+body.dark .hero { background: linear-gradient(120deg, #13241a 0%, #16241b 52%, #262013 100%); border-color: #2a4132; box-shadow: 0 14px 40px rgba(0,0,0,.5); }
+body.dark .b1 { background: radial-gradient(circle, rgba(79,154,95,.34), transparent 68%); }
+body.dark .b2 { background: radial-gradient(circle, rgba(242,176,74,.16), transparent 70%); }
+body.dark .leaf { opacity: .35; }
+body.dark .eyebrow { color: #8fdca8; background: rgba(255,255,255,.08); border-color: #2f4a38; }
+body.dark .title { background: linear-gradient(90deg, #e8f3e6, #7fe0a0); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+body.dark .text { color: #b3c2b3; }
+body.dark .chip { background: rgba(255,255,255,.07); border-color: #2f4a38; box-shadow: none; }
+body.dark .chip b { color: #7fe0a0; }
+body.dark .chip span { color: #a9b7a9; }
+body.dark .seg { background: rgba(255,255,255,.07); border-color: #2f4a38; }
+body.dark .seg button { color: #b3d1b9; }
+body.dark .seg button:hover { background: rgba(79,154,95,.22); }
+body.dark .seg button.on { color: #fff; }
+body.dark .card { background: rgba(255,255,255,.06); border-color: #2f4a38; box-shadow: 0 6px 16px rgba(0,0,0,.35); }
+body.dark .card:hover { box-shadow: 0 14px 26px rgba(0,0,0,.5); }
+body.dark .card.rotten { background: rgba(120,40,35,.20); border-color: #6b3a34; }
+body.dark .name b { color: #e8f3e6; }
+body.dark .name small { color: #8f9f90; }
+body.dark .tag { background: rgba(79,154,95,.28); color: #9be0b2; }
+body.dark .card.rotten .tag { background: rgba(196,87,76,.30); color: #ffaaa0; }
+body.dark .tag.pend { background: rgba(255,255,255,.10); color: #9aa89b; }
+body.dark .fruit svg { filter: drop-shadow(0 5px 5px rgba(0,0,0,.4)); }
+body.dark .card.rotten .fruit svg { filter: saturate(.55) sepia(.5) brightness(.8) contrast(1.06) drop-shadow(0 5px 5px rgba(0,0,0,.45)); }
+body.dark .flow { background: rgba(255,255,255,.06); border-color: #2f4a38; }
+body.dark .step { color: #9be0b2; }
+body.dark .arrow { background: repeating-linear-gradient(90deg, #4d7a58 0 5px, transparent 5px 9px); }
+body.dark .note { color: #7f8f82; }
+body.dark .eyebrow svg [fill="#2f6b43"] { fill: #8fdca8; }
+body.dark .eyebrow svg [stroke="#2f6b43"] { stroke: #8fdca8; }
 </style>
 </head>
-<body class="__VARIANT__">
+<body class="__VARIANT__ __THEME__">
 
 <div class="hero">
     <div class="blob b1"></div><div class="blob b2"></div>
@@ -484,6 +518,8 @@ def render_hero(icon, eyebrow, title, text, variant="compact"):
     html = (
         HERO_HTML
         .replace("__VARIANT__", variant)
+        .replace("__THEME__", "dark" if IS_DARK else "light")
+        .replace("__SCHEME__", "dark" if IS_DARK else "light")
         .replace("__ICON__", icon)
         .replace("__EYEBROW__", eyebrow)
         .replace("__TITLE__", title)
@@ -578,6 +614,19 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="auto"
 )
+
+
+def detect_theme():
+    """คืนค่า 'light' หรือ 'dark' ตามธีมที่ Streamlit ใช้อยู่ (None ถ้า Streamlit รุ่นเก่าไม่รองรับ)"""
+    try:
+        theme_type = st.context.theme.type
+    except Exception:
+        return None
+    return theme_type if theme_type in ("light", "dark") else None
+
+
+THEME = detect_theme()
+IS_DARK = THEME == "dark"
 
 
 render_html(
@@ -1182,10 +1231,170 @@ html { scroll-behavior: smooth; }
     .section-title { font-size: 1.3rem; }
 }
 
+    
+
     </style>
     """,
     unsafe_allow_html=True
 )
+
+
+# ---------------------------------------------------------------------------
+# ธีมสว่าง / มืด
+# อ่านธีมที่ Streamlit ใช้อยู่จริง (รวมถึงตัวเลือก System/Light/Dark ในเมนู Settings)
+# - dark  : ใช้ชุดสีมืด DARK_CSS ให้พื้นผิวทั้งหมดเข้ากับตัวอักษรสีขาวของ Streamlit
+# - อื่น ๆ : ใช้โทนสว่างและบังคับสีตัวอักษรเข้ม (LIGHT_LOCK_CSS)
+# ---------------------------------------------------------------------------
+
+DARK_CSS = r"""/* ================= dark theme (used only when Streamlit's active theme is dark) ================= */
+:root, html, body { color-scheme: dark !important; }
+.stApp {
+    background:
+        radial-gradient(circle at 12% 8%, rgba(79, 154, 95, 0.20), transparent 40%),
+        radial-gradient(circle at 92% 4%, rgba(242, 176, 74, 0.09), transparent 36%),
+        #0e1411;
+}
+[data-testid="stHeader"] { background: transparent !important; }
+hr { border-color: #26352b !important; }
+::selection { background: #2f6b43; color: #ffffff; }
+::-webkit-scrollbar-thumb { background: #36503b; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: #4d7a58; background-clip: padding-box; }
+
+/* sidebar */
+.stApp [data-testid="stSidebar"] { background: linear-gradient(180deg, #121c16 0%, #0f1712 60%, #17150f 100%); border-right: 1px solid #223127; }
+.stApp [data-testid="stSidebar"] p { color: #a9b7a9; }
+.stApp [data-testid="stSidebar"] [data-testid="stRadio"] label { background: rgba(255,255,255,0.04); border-color: #2a382e; }
+.stApp [data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background: rgba(255,255,255,0.09); border-color: #4a7a55; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+.stApp [data-testid="stSidebar"] [data-testid="stRadio"] label p { color: #d3e3d3; }
+.sidebar-logo-title { color: #e8f3e6; }
+.sidebar-logo-sub { color: #9fb0a0; }
+.sidebar-menu-label { color: #8aa08b; }
+.sidebar-footer { color: #8a998b; }
+.pill { background: rgba(255,255,255,0.05); border-color: #2a382e; color: #d3e3d3; }
+.pill:hover { background: rgba(255,255,255,0.11); box-shadow: 0 4px 10px rgba(0,0,0,0.35); }
+
+/* headings and cards */
+.section-label { color: #8fdca8; background: rgba(79,154,95,0.20); }
+.section-title { color: #e8f3e6; }
+.info-card { background: #17201a; border-color: #2a382e; box-shadow: 0 6px 20px rgba(0,0,0,0.35); }
+.info-card:hover { border-color: #4a7a55; box-shadow: 0 16px 34px rgba(0,0,0,0.5); }
+.info-card-title { color: #7fd69a; }
+.info-card-text { color: #b3c2b3; }
+.workflow-title { color: #e8f3e6; }
+.workflow-text { color: #a9b7a9; }
+.upload-title { color: #e8f3e6; }
+.small-note { color: #8f9f90; }
+.model-badge { background: rgba(79,154,95,0.16); color: #9be0b2; border-color: #2f5a3a; }
+.marquee { background: linear-gradient(90deg, #142019, #1d1b13); border-color: #2a382e; }
+.marquee-item { color: #8fdca8; }
+.marquee-item small { color: #8f9f90; }
+.marquee-item i { box-shadow: 0 0 0 3px rgba(255,255,255,0.12); }
+
+/* result card */
+.result-fresh { background: linear-gradient(145deg, #16301f, #1d4a2c); border-color: #2f6b43; box-shadow: 0 14px 34px rgba(0,0,0,0.45); }
+.result-rotten { background: linear-gradient(145deg, #33181a, #4a2320); border-color: #7a3a33; box-shadow: 0 14px 34px rgba(0,0,0,0.45); }
+.result-fresh .result-label, .result-fresh .result-percent { color: #7fe0a0; }
+.result-rotten .result-label, .result-rotten .result-percent { color: #ff9b8f; }
+.result-confidence, .result-meta { color: #aab9aa; }
+.result-kicker { color: #9fb0a0; }
+.result-hint { color: #93a394; }
+.result-note { color: #7f8f82; }
+.ring { --ringc: #6fcf8a; background: conic-gradient(var(--ringc) calc(var(--p) * 1%), rgba(255,255,255,0.14) 0); }
+.result-rotten .ring { --ringc: #ef8479; }
+.ring::before { background: rgba(14,20,17,0.88); }
+.fruit-chip { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.16); color: #e8f3e6; }
+
+/* Streamlit widgets that were given light surfaces */
+div[data-testid="stMetric"] { background: #17201a; border-color: #2a382e; border-top-color: #4f9a5f; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+div[data-testid="stMetric"]:hover { box-shadow: 0 14px 28px rgba(0,0,0,0.5); }
+div[data-testid="stMetricLabel"], div[data-testid="stMetricLabel"] * { color: #a9b7a9; }
+div[data-testid="stMetricValue"], div[data-testid="stMetricValue"] * { color: #7fe0a0; }
+[data-testid="stFileUploader"] section { background: rgba(255,255,255,0.04); border-color: #3f6b4a; }
+[data-testid="stFileUploader"] section:hover { background: rgba(255,255,255,0.07); border-color: #6fcf8a; }
+div[data-baseweb="select"] > div { background: #17201a; border-color: #2f4234; }
+[data-testid="stImage"] img { box-shadow: 0 10px 28px rgba(0,0,0,0.5); }
+[data-testid="stDataFrame"] { border-color: #2a382e; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+.stApp [data-testid="stExpander"] details { border: 1px solid #2a382e; border-radius: 14px; }
+
+/* in-page navigation on phones */
+.st-key-nav_m [data-testid="stRadio"] label { background: #17201a; border-color: #2a382e; }
+.st-key-nav_m [data-testid="stRadio"] label p { color: #d3e3d3; }
+"""
+
+LIGHT_LOCK_CSS = r"""/* ================= keep the light palette on dark-mode devices =================
+   The design is a light theme. When the phone/PC is in dark mode Streamlit switches its own
+   text to white, which disappeared against the light cards. These rules pin every piece of
+   Streamlit-owned text to a dark colour. (.streamlit/config.toml pins the widgets themselves.) */
+:root, html, body { color-scheme: light !important; }
+.stApp, [data-testid="stApp"], [data-testid="stAppViewContainer"], [data-testid="stMain"],
+[data-testid="stSidebar"], [data-testid="stSidebarContent"], [data-testid="stHeader"], [data-testid="stToolbar"] {
+    color-scheme: light !important;
+}
+.stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] { color: #1f3d2a !important; }
+[data-testid="stHeader"] { background: transparent !important; }
+
+/* top bar, menu and the phone's sidebar toggle */
+[data-testid="stHeader"] *, [data-testid="stToolbar"] *, [data-testid="stMainMenu"] *,
+[data-testid="collapsedControl"] *, [data-testid="stExpandSidebarButton"] *,
+[data-testid="stSidebarCollapseButton"] * { color: #35503b !important; fill: #35503b !important; }
+
+/* Markdown text written by Streamlit itself (tips box, notes, headings) */
+.stApp [data-testid="stMarkdownContainer"] p,
+.stApp [data-testid="stMarkdownContainer"] li,
+.stApp [data-testid="stMarkdownContainer"] ol,
+.stApp [data-testid="stMarkdownContainer"] ul,
+.stApp [data-testid="stMarkdownContainer"] h1, .stApp [data-testid="stMarkdownContainer"] h2,
+.stApp [data-testid="stMarkdownContainer"] h3, .stApp [data-testid="stMarkdownContainer"] h4 { color: #2d3f31 !important; }
+.stApp [data-testid="stCaptionContainer"], .stApp [data-testid="stCaptionContainer"] * { color: #6b786b !important; }
+
+/* widget labels, checkbox, radio, select */
+.stApp [data-testid="stWidgetLabel"], .stApp [data-testid="stWidgetLabel"] p,
+.stApp [data-testid="stWidgetLabel"] label { color: #35503b !important; }
+.stApp [data-testid="stCheckbox"] label, .stApp [data-testid="stCheckbox"] label p,
+.stApp [data-testid="stCheckbox"] label span { color: #35503b !important; }
+.stApp div[data-baseweb="select"] > div { background: #ffffff !important; }
+.stApp div[data-baseweb="select"] [class*="singleValue"], .stApp div[data-baseweb="select"] input,
+.stApp div[data-baseweb="select"] div[value] { color: #1f3d2a !important; -webkit-text-fill-color: #1f3d2a !important; }
+.stApp div[data-baseweb="select"] svg { fill: #4d6a55 !important; }
+
+/* uploader: instructions sit on a white dashed box */
+.stApp [data-testid="stFileUploaderDropzone"] { background: rgba(255,255,255,0.85) !important; }
+.stApp [data-testid="stFileUploaderDropzoneInstructions"] *, .stApp [data-testid="stFileUploaderDropzone"] small { color: #52604f !important; }
+.stApp [data-testid="stFileUploaderFile"] *, .stApp [data-testid="stFileUploaderFileName"] { color: #35503b !important; }
+
+/* expander (photo tips) */
+.stApp [data-testid="stExpander"] details { background: rgba(255,255,255,0.78) !important; border: 1px solid #dbe8d4 !important; border-radius: 14px !important; }
+.stApp [data-testid="stExpander"] summary, .stApp [data-testid="stExpander"] summary p,
+.stApp [data-testid="stExpander"] summary span { color: #2f6b43 !important; font-weight: 600; }
+.stApp [data-testid="stExpander"] summary svg { fill: #2f6b43 !important; }
+
+/* metrics, alerts, spinner, progress */
+.stApp div[data-testid="stMetricLabel"], .stApp div[data-testid="stMetricLabel"] * { color: #6e776f !important; }
+.stApp div[data-testid="stMetricValue"], .stApp div[data-testid="stMetricValue"] * { color: #2f6b43 !important; }
+.stApp div[data-testid="stAlert"] { background: #e8f1fb !important; }
+.stApp div[data-testid="stAlert"] *, .stApp div[data-testid="stAlert"] p { color: #1d3557 !important; }
+.stApp [data-testid="stSpinner"] *, .stApp [data-testid="stSpinner"] p { color: #35503b !important; }
+.stApp div[data-testid="stProgress"] > div > div { background-color: rgba(47,107,67,0.14) !important; }
+
+/* sidebar */
+[data-testid="stSidebar"] [data-testid="stCheckbox"] label span,
+[data-testid="stSidebar"] [data-testid="stCheckbox"] label p { color: #35503b !important; }
+[data-testid="stSidebar"] hr { border-color: #dbe6d3 !important; }
+
+/* tables */
+.stApp [data-testid="stTable"] *, .stApp table, .stApp table * { color: #1f3d2a; }"""
+
+if IS_DARK:
+    render_html(
+        "<style>" + DARK_CSS + "</style>",
+        unsafe_allow_html=True
+    )
+else:
+    render_html(
+        "<style>" + LIGHT_LOCK_CSS + "</style>",
+        unsafe_allow_html=True
+    )
+
 
 
 @st.cache_data
