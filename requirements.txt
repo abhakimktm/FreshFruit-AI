@@ -5,4 +5,4 @@ pandas
 joblib == 1.6.0
 pillow
 scikit-image
-scikit-leaarn == 1.9.1
+scikit-learn == 1.9.1
