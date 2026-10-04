@@ -1,0 +1,4 @@
+Model,Validation Accuracy,Test Accuracy,Precision,Recall,F1-score,Correct,Incorrect
+HOG + SVM,86.19,87.08,88.36,85.42,86.86,418,62
+Custom CNN,94.14,93.75,94.87,92.5,93.67,450,30
+MobileNetV2,90.79,90.42,92.54,87.92,90.17,434,46

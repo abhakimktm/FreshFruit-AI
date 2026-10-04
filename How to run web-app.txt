@@ -1,0 +1,5 @@
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass               // 1.set dir to use venv.
+
+.venv\Scripts\Activate.ps1                                               // 2.start using venv in your current dir
+
+python -m streamlit run .\app.py					 // 3.run web app
