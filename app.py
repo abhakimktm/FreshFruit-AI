@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -8,7 +7,6 @@ import streamlit.components.v1 as components
 import tensorflow as tf
 
 from PIL import Image
-from skimage.feature import hog
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -258,7 +256,7 @@ body.dark .eyebrow svg [stroke="#2f6b43"] { stroke: #8fdca8; }
             <div class="chip"><b data-to="8">0</b><span>ชนิดผลไม้</span></div>
             <div class="chip"><b data-to="16">0</b><span>กลุ่มข้อมูลย่อย</span></div>
             <div class="chip"><b data-to="3193">0</b><span>ภาพ</span></div>
-            <div class="chip"><b data-to="3">0</b><span>โมเดล</span></div>
+            <div class="chip"><b data-to="1">0</b><span>โมเดล</span></div>
         </div>
 
         <div class="seg" id="seg">
@@ -548,25 +546,15 @@ def fruit_marquee_html():
     return f'<div class="marquee"><div class="marquee-track">{items}{items}</div></div>'
 
 
-def gauge_html(confidence, has_probability):
-    if not has_probability:
-        return (
-            '<div class="result-confidence" style="margin-top:0.8rem;">'
-            'HOG + SVM ให้ผลเป็นคลาสเท่านั้น ไม่มีค่าความน่าจะเป็น'
-            '</div>'
-        )
+def gauge_html(confidence, has_probability=True):
     return (
-        '<div class="result-confidence">ความแม่นยำ</div>'
+        '<div class="result-confidence">ความมั่นใจของโมเดล</div>'
         f'<div class="ring" style="--p:{confidence * 100:.2f};"><span>{confidence * 100:.1f}%</span></div>'
     )
 
 
-FRUIT_OPTIONS = ["ไม่ระบุ"] + [f"{en} ({th})" for en, th, _ in FRUIT_LIST]
-FRUIT_COLORS = {f"{en} ({th})": c for en, th, c in FRUIT_LIST}
-
-
-def result_card_html(kind, confidence, has_probability, model_name, fruit_choice):
-    """kind = 'fresh' | 'rotten'. fruit_choice is what the USER picked (the models do not detect fruit type)."""
+def result_card_html(kind, confidence, has_probability, model_name):
+    """Render the prediction result card for the CNN-only application."""
     fresh = kind == "fresh"
     icon = "check_circle" if fresh else "cancel"
     word = "สด" if fresh else "เน่า"
@@ -576,27 +564,14 @@ def result_card_html(kind, confidence, has_probability, model_name, fruit_choice
         else "จากภาพนี้ โมเดลประเมินว่าพบลักษณะของผลไม้เน่าเสีย"
     )
 
-    chip = ""
-    note = ""
-    if fruit_choice and fruit_choice != "ไม่ระบุ":
-        color = FRUIT_COLORS.get(fruit_choice, "#4f9a5f")
-        chip = f'<div class="fruit-chip"><i style="--c:{color}"></i>{fruit_choice}</div>'
-        note = (
-            '<div class="result-note">'
-            'ชนิดผลไม้เป็นข้อมูลที่ผู้ใช้เลือก ระบบจำแนกเฉพาะสด/เน่า ไม่ได้ตรวจจับชนิดผลไม้'
-            '</div>'
-        )
-
     return (
         f'<div class="result-{kind}">'
         '<div class="result-kicker">ผลลัพธ์การจำแนก</div>'
-        f'{chip}'
         f'<div class="result-label"><span class="icon">{icon}</span> '
-        f'ผลไม้ชนิดนี้ <span class="verdict-word">{word}</span></div>'
+        f'ผลไม้ในภาพ <span class="verdict-word">{word}</span></div>'
         f'{gauge_html(confidence, has_probability)}'
         f'<div class="result-meta">โมเดลที่ใช้: <b>{model_name}</b></div>'
         f'<div class="result-hint">{hint}<br>ควรตรวจสอบผลไม้จริงอีกครั้งก่อนตัดสินใจ</div>'
-        f'{note}'
         '</div>'
     )
 
@@ -1397,33 +1372,31 @@ else:
 
 
 
-@st.cache_data
-def load_comparison():
-    return pd.read_csv(
-        ASSETS_DIR / "model_comparison.csv"
-    )
-
-
 @st.cache_resource
-def load_models():
-
-    cnn = tf.keras.models.load_model(
+def load_model():
+    return tf.keras.models.load_model(
         MODELS_DIR / "custom_cnn_best.keras"
     )
 
-    mobilenet = tf.keras.models.load_model(
-        MODELS_DIR / "mobilenetv2_best.keras"
-    )
 
-    svm = joblib.load(
-        MODELS_DIR / "hog_svm_model.pkl"
-    )
-
-    return cnn, mobilenet, svm
+cnn = load_model()
 
 
-df = load_comparison()
-cnn, mobilenet, svm = load_models()
+CNN_RESULTS = {
+    "Validation Accuracy": 94.14,
+    "Test Accuracy": 93.75,
+    "Precision": 94.87,
+    "Recall": 92.50,
+    "F1-score": 93.67,
+    "Correct": 450,
+    "Incorrect": 30,
+}
+
+
+CNN_CONFUSION_MATRIX = [
+    [228, 12],
+    [18, 222],
+]
 
 
 def predict_cnn(image):
@@ -1450,60 +1423,6 @@ def predict_cnn(image):
     return float(probability)
 
 
-def predict_mobilenet(image):
-
-    image = image.resize(
-        (224, 224)
-    )
-
-    image = np.array(
-        image,
-        dtype=np.float32
-    )
-
-    image = np.expand_dims(
-        image,
-        axis=0
-    )
-
-    probability = mobilenet.predict(
-        image,
-        verbose=0
-    )[0][0]
-
-    return float(probability)
-
-
-def predict_hog_svm(image):
-
-    image = image.convert(
-        "RGB"
-    )
-
-    image = image.resize(
-        (160, 160)
-    )
-
-    image = np.array(
-        image
-    )
-
-    features = hog(
-        image,
-        orientations=9,
-        pixels_per_cell=(16, 16),
-        cells_per_block=(2, 2),
-        block_norm="L2-Hys",
-        channel_axis=-1
-    )
-
-    prediction = svm.predict(
-        [features]
-    )[0]
-
-    return int(prediction)
-
-
 render_html_sidebar(
     """
     <div class="sidebar-logo">
@@ -1526,7 +1445,7 @@ render_html_sidebar(
 )
 
 
-PAGES = ["Overview", "Predict", "Model Comparison"]
+PAGES = ["Overview", "Predict", "Model Performance"]
 
 
 def _sync_nav(src, dst):
@@ -1591,9 +1510,9 @@ if page == "Overview":
 
     render_hero(
         icon='eco',
-        eyebrow='Machine Learning • คุณภาพผลไม้',
+        eyebrow='Deep Learning • คุณภาพผลไม้',
         title='FreshFruit AI',
-        text='ระบบจำแนกภาพที่ใช้ Machine Learning เพื่อตรวจสอบว่าผลไม้ในภาพ <b>สด</b> หรือ <b>เน่า</b>',
+        text='ระบบจำแนกภาพที่ใช้ Custom CNN เพื่อจำแนกว่าผลไม้ในภาพเป็น <b>สด</b> หรือ <b>เน่า</b>',
         variant='full'
     )
 
@@ -1620,13 +1539,13 @@ if page == "Overview":
     with col3:
         st.metric(
             "จำนวนโมเดล",
-            "3"
+            "1"
         )
 
     with col4:
         st.metric(
             "ความแม่นยำสูงสุด (ชุดทดสอบ)",
-            f"{df['Test Accuracy'].max():.2f}%"
+            f"{CNN_RESULTS['Test Accuracy']:.2f}%"
         )
 
 
@@ -1663,8 +1582,8 @@ if page == "Overview":
                 </div>
 
                 <div class="info-card-text">
-                    FreshFruit AI เปรียบเทียบแนวทางการจำแนกภาพ
-                    3 แบบ เพื่อแยกผลไม้สดออกจากผลไม้เน่า
+                    FreshFruit AI ใช้ Custom CNN สำหรับการจำแนกภาพ
+                    ผลไม้สดและผลไม้เน่า
                     ผู้ใช้สามารถอัปโหลดภาพ
                     แล้วให้โมเดลที่ฝึกไว้วิเคราะห์ผลได้
                 </div>
@@ -1695,21 +1614,15 @@ if page == "Overview":
 
                 <div class="info-card-text">
 
-                    <span class="icon">grid_view</span> <b>HOG + SVM</b><br>
-                    แนวทางคอมพิวเตอร์วิทัศน์แบบดั้งเดิม
-                    โดยใช้ฟีเจอร์ของภาพที่ออกแบบขึ้นเอง
-
-                    <br><br>
-
                     <span class="icon">hub</span> <b>Custom CNN</b><br>
                     โครงข่ายประสาทเทียมแบบคอนโวลูชัน
                     ที่ฝึกขึ้นเฉพาะสำหรับชุดข้อมูลนี้
 
                     <br><br>
 
-                    <span class="icon">smartphone</span> <b>MobileNetV2</b><br>
-                    โมเดลจำแนกภาพขนาดเบา
-                    ที่ใช้เทคนิค Transfer Learning
+                    Image Size: <b>160 × 160</b><br>
+                    Batch Size: <b>16</b><br>
+                    Epochs: <b>15</b>
 
                 </div>
 
@@ -1747,12 +1660,12 @@ if page == "Overview":
         (
             '<span class="icon">image</span> 2',
             "เตรียมภาพ",
-            "ปรับขนาดและเตรียมภาพให้เหมาะกับโมเดลที่เลือก"
+            "ปรับขนาดและเตรียมภาพให้เหมาะกับ Custom CNN"
         ),
         (
             '<span class="icon">psychology</span> 3',
             "วิเคราะห์",
-            "โมเดล Machine Learning ที่ฝึกไว้วิเคราะห์ภาพ"
+            "โมเดล Custom CNN ที่ฝึกไว้วิเคราะห์ภาพ"
         ),
         (
             '<span class="icon">check_circle</span> 4',
@@ -1808,29 +1721,45 @@ if page == "Overview":
     )
 
 
-    chart_data = df.set_index(
-        "Model"
-    )["Test Accuracy"]
+    overview_metrics_df = pd.DataFrame(
+        {
+            "ตัวชี้วัด": [
+                "Accuracy",
+                "Precision",
+                "Recall",
+                "F1-score"
+            ],
+            "คะแนน (%)": [
+                CNN_RESULTS["Test Accuracy"],
+                CNN_RESULTS["Precision"],
+                CNN_RESULTS["Recall"],
+                CNN_RESULTS["F1-score"]
+            ]
+        }
+    ).set_index("ตัวชี้วัด")
 
 
     st.bar_chart(
-        chart_data,
+        overview_metrics_df,
         height=330
     )
 
 
     st.caption(
-        "ประสิทธิภาพวัดจากชุดข้อมูลทดสอบที่แยกอิสระ"
+        "ผลการประเมินคำนวณจากชุดข้อมูลทดสอบจำนวน 480 ภาพ"
     )
 
 
 elif page == "Predict":
 
+    model_name = "Custom CNN"
+    model_accuracy = "93.75%"
+
     render_hero(
         icon='search',
         eyebrow='ตรวจสอบด้วย AI',
         title='ทำนายคุณภาพผลไม้',
-        text='อัปโหลดภาพผลไม้ แล้วให้โมเดลที่เลือก จำแนกว่าเป็นผลไม้ <b>สด</b> หรือ <b>เน่า</b>'
+        text='อัปโหลดภาพผลไม้ แล้วให้ <b>Custom CNN</b> จำแนกว่าเป็นผลไม้ <b>สด</b> หรือ <b>เน่า</b>'
     )
 
 
@@ -1844,44 +1773,41 @@ elif page == "Predict":
         render_html(
             """
             <div class="upload-title">
-                เลือกโมเดล
+                โมเดลที่ใช้
             </div>
             """,
             unsafe_allow_html=True
         )
-
-
-        model_name = st.selectbox(
-            "โมเดล",
-            [
-                "Custom CNN",
-                "MobileNetV2",
-                "HOG + SVM"
-            ],
-            label_visibility="collapsed"
-        )
-
-
-        model_accuracy = {
-            "Custom CNN": "93.75%",
-            "MobileNetV2": "90.42%",
-            "HOG + SVM": "87.08%"
-        }
 
 
         render_html(
             f"""
             <div class="model-badge">
-                ความแม่นยำบนชุดทดสอบ: {model_accuracy[model_name]}
+                Custom CNN • ความแม่นยำบนชุดทดสอบ: {model_accuracy}
             </div>
             """,
             unsafe_allow_html=True
         )
 
-        fruit_choice = st.selectbox(
-            "ชนิดผลไม้ (ไม่บังคับ)",
-            FRUIT_OPTIONS,
-            help="ใช้แสดงในผลลัพธ์เท่านั้น ระบบไม่ได้ตรวจจับชนิดผลไม้จากภาพ"
+
+        render_html(
+            """
+            <div class="info-card">
+                <div class="info-card-title">
+                    <span class="icon">hub</span> Custom CNN
+                </div>
+                <div class="info-card-text">
+                    โมเดล Convolutional Neural Network
+                    ที่พัฒนาขึ้นสำหรับจำแนกผลไม้เป็น
+                    <b>Fresh</b> หรือ <b>Rotten</b>
+                    <br><br>
+                    Image Size: <b>160 × 160</b><br>
+                    Batch Size: <b>16</b><br>
+                    Epochs: <b>15</b>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
 
@@ -1950,19 +1876,16 @@ elif page == "Predict":
             render_html(
                 f"""
                 <div class="info-card">
-
                     <div class="info-card-title">
                         พร้อมวิเคราะห์
                     </div>
-
                     <div class="info-card-text">
                         โมเดล:
-                        <b>{model_name}</b>
+                        <b>Custom CNN</b>
                         <br><br>
                         ความแม่นยำบนชุดทดสอบ:
-                        <b>{model_accuracy[model_name]}</b>
+                        <b>{model_accuracy}</b>
                     </div>
-
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -1985,58 +1908,21 @@ elif page == "Predict":
 
                 with st.spinner("AI กำลังวิเคราะห์ภาพ..."):
 
-                    if model_name == "Custom CNN":
+                    probability = predict_cnn(
+                        image
+                    )
 
-                        probability = predict_cnn(
-                            image
-                        )
+                    label = (
+                        "Rotten"
+                        if probability >= 0.5
+                        else "Fresh"
+                    )
 
-                        label = (
-                            "Rotten"
-                            if probability >= 0.5
-                            else "Fresh"
-                        )
+                    fresh_probability = (
+                        1 - probability
+                    )
 
-                        fresh_probability = (
-                            1 - probability
-                        )
-
-                        rotten_probability = probability
-
-
-                    elif model_name == "MobileNetV2":
-
-                        probability = predict_mobilenet(
-                            image
-                        )
-
-                        label = (
-                            "Rotten"
-                            if probability >= 0.5
-                            else "Fresh"
-                        )
-
-                        fresh_probability = (
-                            1 - probability
-                        )
-
-                        rotten_probability = probability
-
-
-                    else:
-
-                        prediction = predict_hog_svm(
-                            image
-                        )
-
-                        label = (
-                            "Rotten"
-                            if prediction == 1
-                            else "Fresh"
-                        )
-
-                        fresh_probability = None
-                        rotten_probability = None
+                    rotten_probability = probability
 
 
                 render_html(
@@ -2045,94 +1931,65 @@ elif page == "Predict":
                 )
 
 
-                if label == "Fresh":
+                confidence = (
+                    fresh_probability
+                    if label == "Fresh"
+                    else rotten_probability
+                )
 
-                    confidence = (
-                        fresh_probability
-                        if fresh_probability is not None
-                        else 1.0
-                    )
 
-                    render_html(
-                        result_card_html(
-                            "fresh",
-                            confidence,
-                            fresh_probability is not None,
-                            model_name,
-                            fruit_choice
-                        ),
-                        unsafe_allow_html=True
-                    )
-
-                else:
-
-                    confidence = (
-                        rotten_probability
-                        if rotten_probability is not None
-                        else 1.0
-                    )
-
-                    render_html(
-                        result_card_html(
-                            "rotten",
-                            confidence,
-                            fresh_probability is not None,
-                            model_name,
-                            fruit_choice
-                        ),
-                        unsafe_allow_html=True
-                    )
+                render_html(
+                    result_card_html(
+                        "fresh" if label == "Fresh" else "rotten",
+                        confidence,
+                        True,
+                        model_name
+                    ),
+                    unsafe_allow_html=True
+                )
 
 
                 st.toast("วิเคราะห์เสร็จแล้ว")
 
+
                 if label == "Fresh" and celebrate:
                     st.balloons()
 
-                if fresh_probability is not None:
 
-                    render_html(
-                        "<br>",
-                        unsafe_allow_html=True
+                render_html(
+                    "<br>",
+                    unsafe_allow_html=True
+                )
+
+
+                prob1, prob2 = st.columns(2)
+
+
+                with prob1:
+
+                    st.metric(
+                        "สด",
+                        f"{fresh_probability * 100:.2f}%"
+                    )
+
+                    st.progress(
+                        float(
+                            fresh_probability
+                        )
                     )
 
 
-                    prob1, prob2 = st.columns(2)
+                with prob2:
 
+                    st.metric(
+                        "เน่า",
+                        f"{rotten_probability * 100:.2f}%"
+                    )
 
-                    with prob1:
-
-                        st.metric(
-                            "สด",
-                            f"{fresh_probability * 100:.2f}%"
+                    st.progress(
+                        float(
+                            rotten_probability
                         )
-
-                        st.progress(
-                            float(
-                                fresh_probability
-                            )
-                        )
-
-
-                    with prob2:
-
-                        st.metric(
-                            "เน่า",
-                            f"{rotten_probability * 100:.2f}%"
-                        )
-
-                        st.progress(
-                            float(
-                                rotten_probability
-                            )
-                        )
-
-
-                else:
-
-                    st.info(
-                        "HOG + SVM ให้ผลทำนายเป็นคลาสเท่านั้น "
-                        "โดยไม่มีค่าประมาณความน่าจะเป็น"
                     )
 
 
@@ -2148,42 +2005,45 @@ elif page == "Predict":
                 )
 
 
-elif page == "Model Comparison":
+
+elif page == "Model Performance":
 
     render_hero(
         icon='analytics',
         eyebrow='การประเมินโมเดล',
-        title='Model Comparison',
-        text='เปรียบเทียบ 3 แนวทางในการจำแนก ผลไม้สดและผลไม้เน่า โดยใช้ ชุดข้อมูลทดสอบที่แยกอิสระชุดเดียวกัน'
+        title='Model Performance',
+        text='ผลการทดสอบของ Custom CNN สำหรับการจำแนกผลไม้สดและผลไม้เน่า จากชุดข้อมูลทดสอบที่แยกอิสระ'
     )
 
 
-    best_model = df.loc[
-        df["Test Accuracy"].idxmax()
-    ]
-
-
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
 
     with col1:
         st.metric(
-            "ความแม่นยำสูงสุด (ชุดทดสอบ)",
-            best_model["Test Accuracy"]
+            "Test Accuracy",
+            f'{CNN_RESULTS["Test Accuracy"]:.2f}%'
         )
 
 
     with col2:
         st.metric(
-            "จำนวนโมเดลที่ประเมิน",
-            "3"
+            "Precision",
+            f'{CNN_RESULTS["Precision"]:.2f}%'
         )
 
 
     with col3:
         st.metric(
-            "จำนวนภาพทดสอบ",
-            "480"
+            "Recall",
+            f'{CNN_RESULTS["Recall"]:.2f}%'
+        )
+
+
+    with col4:
+        st.metric(
+            "F1-score",
+            f'{CNN_RESULTS["F1-score"]:.2f}%'
         )
 
 
@@ -2194,60 +2054,42 @@ elif page == "Model Comparison":
 
 
     render_html(
-        '<div class="section-label">ผลลัพธ์</div>',
+        '<div class="section-label">ผลการทดลอง</div>',
         unsafe_allow_html=True
     )
+
 
     render_html(
-        '<div class="section-title">สรุปประสิทธิภาพ</div>',
+        '<div class="section-title">สรุปประสิทธิภาพของ Custom CNN</div>',
         unsafe_allow_html=True
     )
 
 
-    display_df = df.copy().rename(
-        columns={
-            "Model": "โมเดล",
-            "Test Accuracy": "ความแม่นยำ (ชุดทดสอบ)"
+    metrics_df = pd.DataFrame(
+        {
+            "ตัวชี้วัด": [
+                "Validation Accuracy",
+                "Test Accuracy",
+                "Precision",
+                "Recall",
+                "F1-score"
+            ],
+            "คะแนน (%)": [
+                CNN_RESULTS["Validation Accuracy"],
+                CNN_RESULTS["Test Accuracy"],
+                CNN_RESULTS["Precision"],
+                CNN_RESULTS["Recall"],
+                CNN_RESULTS["F1-score"]
+            ]
         }
     )
 
 
     st.dataframe(
-        display_df,
+        metrics_df,
         use_container_width=True,
         hide_index=True
     )
-
-
-    render_html(
-        "<br>",
-        unsafe_allow_html=True
-    )
-
-
-    render_html(
-        '<div class="section-label">ความแม่นยำ</div>',
-        unsafe_allow_html=True
-    )
-
-    render_html(
-        '<div class="section-title">เปรียบเทียบความแม่นยำบนชุดทดสอบ</div>',
-        unsafe_allow_html=True
-    )
-
-
-    accuracy_image = (
-        ASSETS_DIR /
-        "accuracy_comparison.png"
-    )
-
-
-    if accuracy_image.exists():
-
-        st.image(
-            str(accuracy_image),
-            use_container_width=True
-        )
 
 
     render_html(
@@ -2261,23 +2103,82 @@ elif page == "Model Comparison":
         unsafe_allow_html=True
     )
 
+
     render_html(
-        '<div class="section-title">ตัวชี้วัดการจำแนก</div>',
+        '<div class="section-title">คะแนนของโมเดลบนชุดทดสอบ</div>',
         unsafe_allow_html=True
     )
 
 
-    metrics_image = (
-        ASSETS_DIR /
-        "metrics_comparison.png"
+    chart_df = pd.DataFrame(
+        {
+            "คะแนน (%)": [
+                CNN_RESULTS["Test Accuracy"],
+                CNN_RESULTS["Precision"],
+                CNN_RESULTS["Recall"],
+                CNN_RESULTS["F1-score"]
+            ]
+        },
+        index=[
+            "Accuracy",
+            "Precision",
+            "Recall",
+            "F1-score"
+        ]
     )
 
 
-    if metrics_image.exists():
+    st.bar_chart(
+        chart_df,
+        height=350
+    )
 
-        st.image(
-            str(metrics_image),
-            use_container_width=True
+
+    render_html(
+        "<br>",
+        unsafe_allow_html=True
+    )
+
+
+    render_html(
+        '<div class="section-label">Confusion Matrix</div>',
+        unsafe_allow_html=True
+    )
+
+
+    render_html(
+        '<div class="section-title">ผลการจำแนกบนชุดทดสอบ</div>',
+        unsafe_allow_html=True
+    )
+
+
+    cm_df = pd.DataFrame(
+        CNN_CONFUSION_MATRIX,
+        index=["Actual Fresh", "Actual Rotten"],
+        columns=["Predicted Fresh", "Predicted Rotten"]
+    )
+
+
+    st.dataframe(
+        cm_df,
+        use_container_width=True
+    )
+
+
+    correct_col, incorrect_col = st.columns(2)
+
+
+    with correct_col:
+        st.metric(
+            "ทำนายถูกต้อง",
+            f'{CNN_RESULTS["Correct"]} / 480'
+        )
+
+
+    with incorrect_col:
+        st.metric(
+            "ทำนายไม่ถูกต้อง",
+            f'{CNN_RESULTS["Incorrect"]} / 480'
         )
 
 
@@ -2288,30 +2189,28 @@ elif page == "Model Comparison":
 
 
     render_html(
-        '<div class="section-label">ผลการทำนาย</div>',
+        """
+        <div class="info-card">
+            <div class="info-card-title">
+                <span class="icon">insights</span> การวิเคราะห์ผล
+            </div>
+            <div class="info-card-text">
+                Custom CNN ให้ Test Accuracy เท่ากับ
+                <b>93.75%</b> และสามารถจำแนกภาพได้ถูกต้อง
+                <b>450 จาก 480 ภาพ</b> ภายใต้ Dataset
+                และเงื่อนไขการทดลองของโครงงาน
+                <br><br>
+                ผลการประเมินควรตีความภายใต้ขอบเขตของ Dataset
+                ที่ใช้ เนื่องจากแสง พื้นหลัง มุมมอง และคุณภาพของภาพ
+                อาจส่งผลต่อการทำนายเมื่อใช้งานกับภาพที่แตกต่างจากข้อมูลฝึก
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True
     )
-
-    render_html(
-        '<div class="section-title">การทำนายที่ถูกต้องและไม่ถูกต้อง</div>',
-        unsafe_allow_html=True
-    )
-
-
-    correct_image = (
-        ASSETS_DIR /
-        "correct_incorrect.png"
-    )
-
-
-    if correct_image.exists():
-
-        st.image(
-            str(correct_image),
-            use_container_width=True
-        )
 
 
     st.caption(
-        "ตัวชี้วัดทั้งหมดคำนวณจากชุดข้อมูลทดสอบที่แยกอิสระ"
+        "ตัวชี้วัดทั้งหมดคำนวณจากชุดข้อมูลทดสอบจำนวน 480 ภาพ"
     )
+
